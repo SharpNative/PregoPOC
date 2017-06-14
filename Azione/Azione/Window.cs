@@ -73,9 +73,10 @@ namespace Azione
                 case PacketTypes.CREATE_WINDOW_RESPONSE:
                     CreateWindowRespPacket resp = reader.ReadStruct<CreateWindowRespPacket>();
 
-                    WindowID = resp.ID;
 
-                    mSharedMemory = new SharedMemory.BufferReadWrite(@"Global\comp_" + WindowID, mBufSize);
+                    mSharedMemory = new SharedMemory.BufferReadWrite(@"Global\comp_" + resp.ID, mBufSize);
+
+                    WindowID = resp.ID;
                     break;
             }
         }
@@ -87,7 +88,7 @@ namespace Azione
 
         private void createWindow()
         {
-            mPacketFS.Send(PacketTypes.CREATE_WINDOW, new CreateWindowPacket { X = X, Y = Y, Height = Width, Width = Height });
+            mPacketFS.Send(PacketTypes.CREATE_WINDOW, new CreateWindowPacket { X = X, Y = Y, Height = Height, Width = Width });
         }
 
         public void Flush()

@@ -72,6 +72,10 @@ namespace Azione.Cairo
 
         [DllImport("libcairo-2.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "cairo_set_line_width")]
         public static extern int SetLineWidth(int context, int width);
+
+
+        [DllImport("libcairo-2.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "cairo_image_surface_create_from_png")]
+        public static extern int CreateFromPng(string filename);
     }
 
     public enum CairoFormat
