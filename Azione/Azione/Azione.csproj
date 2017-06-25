@@ -67,14 +67,20 @@
     <Compile Include="PacketFSClient.cs" />
     <Compile Include="Packets\CreateWindowPacket.cs" />
     <Compile Include="Packets\CreateWindowRespPacket.cs" />
+    <Compile Include="Packets\MouseEvent.cs" />
     <Compile Include="Packets\PacketTypes.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SharedFifo.cs" />
+    <Compile Include="SharedMemory.cs" />
+    <Compile Include="SharedQueue.cs" />
     <Compile Include="SocketClient.cs" />
+    <Compile Include="UnsafeNativeMethods.cs" />
     <Compile Include="Window.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

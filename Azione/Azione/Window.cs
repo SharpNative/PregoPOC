@@ -1,4 +1,5 @@
 ﻿using Azione.Packets;
+using SharedMemory;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,7 +16,9 @@ namespace Azione
     public unsafe class Window
     {
 
-        private PacketFSClient mPacketFS;
+        private static PacketFSClient mPacketFS;
+
+        private static int mCurMessageID = 0;
 
         public int WindowID { get; private set; } = -1;
 
@@ -31,52 +34,68 @@ namespace Azione
 
         private int mBufSize;
 
-        private SharedMemory.BufferReadWrite mSharedMemory;
-        
+        private int mMessageID;
+
+
+        private BufferReadWrite mSharedMemory;
         private System.Threading.EventWaitHandle mWindowCreated = new System.Threading.AutoResetEvent(false);
 
+        public OnMouseUpdateEventHandler OnMouseUpdate;
+
+
+        public delegate void OnMouseUpdateEventHandler(MouseEvent e);
 
 
         public Window(int x, int y, int width, int height)
         {
+            if (mPacketFS == null)
+                mPacketFS = new PacketFSClient();
+
             Width = width;
             Height = height;
             X = x;
             Y = y;
 
-            mPacketFS = new PacketFSClient();
-
 
             mBufSize = width * height * 4;
             Buffer = (byte*)Marshal.AllocHGlobal(mBufSize);
-            
 
-            mPacketFS.onDataReceived += new PacketFSClient.DataReceivedHandler(dataReceived);
+            mMessageID = mCurMessageID++;
 
+            mPacketFS.RegisterMessageID(mMessageID, this);
 
-            createWindow();
+            CreateWindow();
+        }
+        
+        public void HandleEvent(PacketReader reader)
+        {
+            HandlePacket(reader);
         }
 
-        private void dataReceived(byte[] data)
+        public void HandlePacket(PacketReader reader)
         {
-            foreach (var reader in PacketReader.get(ref data))
-                HandlePacket(reader);
-        }
-
-        private void HandlePacket(PacketReader reader)
-        {
-            int size = reader.ReadInt32();
             PacketTypes type = (PacketTypes)reader.ReadInt32();
 
             switch(type)
             {
                 case PacketTypes.CREATE_WINDOW_RESPONSE:
-                    CreateWindowRespPacket resp = reader.ReadStruct<CreateWindowRespPacket>();
+                    {
+                        CreateWindowRespPacket resp = reader.ReadStruct<CreateWindowRespPacket>();
 
+                        mSharedMemory = new BufferReadWrite(@"Global\compd_" + resp.ID, mBufSize);
 
-                    mSharedMemory = new SharedMemory.BufferReadWrite(@"Global\comp_" + resp.ID, mBufSize);
+                        mPacketFS.RegisterWindow(resp.ID, this);
 
-                    WindowID = resp.ID;
+                        WindowID = resp.ID;
+                    }
+                    break;
+
+                case PacketTypes.MOUSE_UPDATE:
+                    {
+                        MouseEvent e = reader.ReadStruct<MouseEvent>();
+
+                        OnMouseUpdate?.Invoke(e);
+                    }
                     break;
             }
         }
@@ -86,9 +105,11 @@ namespace Azione
             throw new NotImplementedException();
         }
 
-        private void createWindow()
+        private void CreateWindow()
         {
-            mPacketFS.Send(PacketTypes.CREATE_WINDOW, new CreateWindowPacket { X = X, Y = Y, Height = Height, Width = Width });
+            mPacketFS.Send(PacketTypes.CREATE_WINDOW, mMessageID, new CreateWindowPacket { X = X, Y = Y, Height = Height, Width = Width });
+            
+
         }
 
         public void Flush()
@@ -106,7 +127,21 @@ namespace Azione
 
             mSharedMemory.Write((IntPtr)Buffer, mBufSize);
 
-            mPacketFS.SendInt(PacketTypes.INVALIDATE_WINDOW, WindowID);
+
+            mPacketFS.SendInt(PacketTypes.INVALIDATE_WINDOW, mMessageID, WindowID);
+        }
+
+        public void Close()
+        {
+            while (WindowID == -1)
+            {
+                Task.Delay(25).Wait();
+            }
+
+            mSharedMemory.Write((IntPtr)Buffer, mBufSize);
+
+
+            mPacketFS.SendInt(PacketTypes.CLOSE_WINDOW, mMessageID, WindowID);
         }
     }
 }

@@ -6,16 +6,14 @@ using System.Threading.Tasks;
 
 namespace Azione.Packets
 {
-    [Serializable]
-    public struct CreateWindowPacket
+    public struct MouseEvent
     {
-
         public int X;
 
         public int Y;
 
-        public int Width;
+        public bool LeftButton;
 
-        public int Height;
+        public bool RightButton;
     }
 }

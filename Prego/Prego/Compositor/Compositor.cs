@@ -1,10 +1,15 @@
-﻿using Azione.Cairo;
+﻿using Azione;
+using Azione.Cairo;
+using Azione.Packets;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
+using System.Windows.Forms;
 
 namespace Prego.Compositor
 {
@@ -19,13 +24,24 @@ namespace Prego.Compositor
 
         private int mCairoContext;
         private int mCurrentNum = 0;
+        private MouseEvent mEvent;
+        private MouseEvent mOldEvent;
+        private int mCursorSurface;
+
+        private object lockObj = new object();
 
         public Dictionary<int, CompositorWindow> Windows { get; private set; } = new Dictionary<int, CompositorWindow>();
+
+        private AutoResetEvent mAutoEvent = new AutoResetEvent(true);
+
+        public CompositorWindow mActiveWindow;
 
         /// <summary>
         /// Compositor cairo surface
         /// </summary>
         public int CairoSurface { get { return mCairoSurface; } }
+
+        private BufferBlock<Rectangle> mDrawQueue = new BufferBlock<Rectangle>();
 
         /// <summary>
         /// Paint event
@@ -42,9 +58,49 @@ namespace Prego.Compositor
             mCairoSurface = Cairo.CreateSurface(CairoFormat.CAIRO_FORMAT_ARGB32, width, height);
 
             mCairoContext = Cairo.CreateContext(mCairoSurface);
+            mCursorSurface = Cairo.CreateFromPng("cursor.png");
+
+            mEvent = new MouseEvent();
+            mOldEvent = new MouseEvent();
 
             DrawBlack();
+
+            Task.Run(() => { DrawThread(); });
         }
+        
+        private void DrawThread()
+        {
+            while(true)
+            {
+                Rectangle rect = mDrawQueue.ReceiveAsync().Result;
+
+                Cairo.Rectangle(mCairoContext, rect.X, rect.Y, rect.Width, rect.Height);
+                Cairo.Clip(mCairoContext);
+
+                DrawBlack();
+
+
+                List<CompositorWindow> windows = Windows.Values.Where(p => rect.IntersectsWith(p.Bounds)).ToList();
+
+                foreach (CompositorWindow window in windows)
+                {
+                    Cairo.SetSourceSurface(mCairoContext, window.CairoSurface, window.Bounds.X, window.Bounds.Y);
+                    Cairo.Paint(mCairoContext);
+
+                    Cairo.FlushSurface(mCairoSurface);
+                }
+
+                Cairo.ResetClip(mCairoContext);
+
+                // Paint mouse
+                Cairo.SetSourceSurface(mCairoContext, mCursorSurface, mEvent.X, mEvent.Y);
+                Cairo.Paint(mCairoContext);
+
+                Redraw();
+            }
+
+        }
+
         /// <summary>
         /// Request new window ID
         /// </summary>
@@ -54,6 +110,67 @@ namespace Prego.Compositor
             return mCurrentNum++;
         }
 
+        /// <summary>
+        /// Handle form mouse down
+        /// </summary>
+        /// <param name="button"></param>
+        public void MouseButtonDown(MouseButtons button)
+        {
+            if (button == MouseButtons.Left)
+                mEvent.LeftButton = true;
+            else if (button == MouseButtons.Right)
+                mEvent.RightButton = true;
+            //else if(button == MouseButtons.Middle)
+
+            HandleMouse();
+
+            mOldEvent = mEvent;
+        }
+
+        /// <summary>
+        /// Handle form mouse up
+        /// </summary>
+        /// <param name="button"></param>
+        public void MouseButtonUp(MouseButtons button)
+        {
+            if (button == MouseButtons.Left)
+                mEvent.LeftButton = false;
+            else if (button == MouseButtons.Right)
+                mEvent.RightButton = true;
+
+            HandleMouse();
+
+            mOldEvent = mEvent;
+        }
+
+        /// <summary>
+        /// Handle mouse move
+        /// </summary>
+        /// <param name="x"></param>
+        /// <param name="y"></param>
+        public void MouseMove(int x, int y)
+        {
+            mEvent.X = x;
+            mEvent.Y = y;
+
+            HandleMouse();
+
+            mOldEvent = mEvent;
+        }
+
+        /// <summary>
+        /// Handle compositor mouse
+        /// </summary>
+        public void HandleMouse()
+        {
+            DrawArea(new Rectangle(mOldEvent.X, mOldEvent.Y, 20, 32));
+            DrawArea(new Rectangle(mEvent.X, mEvent.Y, 20, 32));
+
+            if (mActiveWindow != null)
+            {
+                mCompositorPacketFS.Sessions[mActiveWindow.ID].SendWindowEvent(PacketTypes.MOUSE_UPDATE, mActiveWindow.ID, mEvent);
+            }
+        }
 
         /// <summary>
         /// Draw background black
@@ -91,6 +208,8 @@ namespace Prego.Compositor
 
             DrawArea(window.Bounds);
 
+            mActiveWindow = window;
+
             return window;
         }
 
@@ -125,25 +244,7 @@ namespace Prego.Compositor
         /// <param name="height">Height</param>
         public void DrawArea(Rectangle rect)
         {
-            Cairo.Rectangle(mCairoContext, rect.X, rect.Y, rect.Width, rect.Height);
-            Cairo.Clip(mCairoContext);
-
-            DrawBlack();
-            
-
-            List< CompositorWindow> windows = Windows.Values.Where(p => rect.IntersectsWith(p.Bounds)).ToList();
-
-            foreach(CompositorWindow window in windows)
-            {
-                Cairo.SetSourceSurface(mCairoContext, window.CairoSurface, window.Bounds.X, window.Bounds.Y);
-                Cairo.Paint(mCairoContext);
-
-                Cairo.FlushSurface(mCairoSurface);
-            }
-
-            Cairo.ResetClip(mCairoContext);
-
-            Redraw();
+            mDrawQueue.Post(rect);
         }
 
         private void Redraw()

@@ -38,14 +38,8 @@ namespace Azione
         public byte[] GetBytes()
         {
             base.Close();
-
-            byte[] bytes = _ms.ToArray();
-
-            PacketWriter binw = new PacketWriter();
-            binw.Write(bytes.Length + 4);
-            binw.Write(bytes);
-
-            return binw._ms.ToArray();
+            
+            return _ms.ToArray();
         }
     }
 

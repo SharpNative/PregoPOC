@@ -39,6 +39,11 @@
             this.Name = "Form1";
             this.Text = "Prego";
             this.Load += new System.EventHandler(this.Form1_Load);
+            this.MouseDown += new System.Windows.Forms.MouseEventHandler(this.Form1_MouseDown);
+            this.MouseEnter += new System.EventHandler(this.Form1_MouseEnter);
+            this.MouseLeave += new System.EventHandler(this.Form1_MouseLeave);
+            this.MouseMove += new System.Windows.Forms.MouseEventHandler(this.Form1_MouseMove);
+            this.MouseUp += new System.Windows.Forms.MouseEventHandler(this.Form1_MouseUp);
             this.ResumeLayout(false);
 
         }

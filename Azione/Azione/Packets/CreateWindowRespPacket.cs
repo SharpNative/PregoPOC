@@ -10,5 +10,7 @@ namespace Azione.Packets
     {
 
         public int ID;
+
+        public int PID;
     }
 }

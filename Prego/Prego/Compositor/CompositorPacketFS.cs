@@ -7,27 +7,52 @@ using System.Threading.Tasks;
 using System.IO.Pipes;
 using System.IO;
 using Prego.Net;
+using Azione;
 
 namespace Prego.Compositor
 {
-    /// <summary>
-    /// NOTE: FOR NOW IT USES TCP! Sharpen will use its packetfs
-    /// </summary>
+
     class CompositorPacketFS
     {
-        private Dictionary<int, PacketFSSession> Sessions = new Dictionary<int, PacketFSSession>();
+        private SharedQueue mGeneralQueue;
+
+
+        public Dictionary<int, PacketFSSession> Sessions = new Dictionary<int, PacketFSSession>();
         private Compositor mComp;
+
+        private Task mListenTask;
 
         private int mCurrentNum = 0;
         
         public CompositorPacketFS(Compositor comp)
         {
             mComp = comp;
-            TcpConnectionManager manager = new TcpConnectionManager("127.0.0.1", 6666, 200);
-            manager.OnNewConnection = new TcpConnectionManager.HandleNewConnectionHandler(newConnectionHandler);
-            manager.GetListener().Start();
+
+            mGeneralQueue = new SharedQueue(@"Global\comp", 10, true);
+            mListenTask = new Task(() => ListenForConnections());
+            mListenTask.Start();
+
+            Sessions = new Dictionary<int, PacketFSSession>();
         }
 
+        public void ListenForConnections()
+        {
+            while(true)
+            {
+                byte[] buf = mGeneralQueue.Read();
+                
+                int pid = mCurrentNum++;
+
+                PacketWriter writer = new PacketWriter();
+                writer.Write(pid);
+
+                new PacketFSSession(pid, this, mComp);
+
+                mGeneralQueue.Write(writer.GetBytes());
+
+            }
+
+        }
 
         /// <summary>
         /// Request window ID
@@ -36,16 +61,7 @@ namespace Prego.Compositor
         /// <param name="session"></param>
         public void RegisterWindowID(int windowID, PacketFSSession session)
         {
-            Sessions = new Dictionary<int, PacketFSSession>();
-        }
-
-        /// <summary>
-        /// Handle new connection
-        /// </summary>
-        /// <param name="connection"></param>
-        private void newConnectionHandler(TcpConnection connection)
-        {
-            connection.Session = new PacketFSSession(this, mComp, connection);
+            Sessions.Add(windowID, session);
         }
     }
 }

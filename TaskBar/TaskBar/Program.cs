@@ -28,6 +28,12 @@ namespace TaskBar
             Cairo.SetSourceRGB(context, 0.149, 0.184, 0.231);
             Cairo.Rectangle(context, 0, 0, width, height);
             Cairo.Fill(context);
+
+            int startSurface = Cairo.CreateFromPng("start.png");
+
+            Cairo.SetSourceRGB(context, 1, 1, 1);
+            Cairo.Rectangle(context, 8, 8, 20, 20);
+            Cairo.Stroke(context);
             
             Cairo.DestroyContext(context);
             Cairo.DestroySurface(context);

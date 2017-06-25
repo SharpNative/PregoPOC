@@ -11,42 +11,137 @@ namespace Azione
 {
     public class PacketFSClient
     {
-        public delegate void DataReceivedHandler(byte[] data);
+        private SharedQueue mGeneralQueue;
+        private SharedQueue mComQueue;
+        private SharedQueue mEventQueue;
 
-        public DataReceivedHandler onDataReceived { get; set; }
+        private Dictionary<int, Window> Windows;
+        private Dictionary<int, Window> Messages;
 
-
-        private SocketClient mClient;
+        private Task mReadTask;
+        private Task mReadEventTask;
 
         public PacketFSClient()
         {
-            mClient = new SocketClient();
-            mClient.DataReceived += new SocketClient.OnReceiveCallBack(dataReceived);
-            mClient.Connect("127.0.0.1", 6666);
+            mGeneralQueue = new SharedQueue(@"Global\comp", 10);
+
+            Windows = new Dictionary<int, Window>();
+            Messages = new Dictionary<int, Window>();
+
+            PacketWriter writer = new PacketWriter();
+            writer.Write(1);
+
+            mGeneralQueue.Write(writer.GetBytes());
+
+
+            byte[] resp = mGeneralQueue.Read();
+
+            PacketReader packet = new PacketReader(resp);
+
+
+            int pid = packet.ReadInt32();
+            
+            mComQueue = new SharedQueue(@"Global\comp_" + pid, 4048);
+            mEventQueue = new SharedQueue(@"Global\compe_" + pid, 4048);
+
+            mReadTask = new Task(() => ListenForData());
+            mReadTask.Start();
+
+            mReadEventTask = new Task(() => ListenForDataEvent());
+            mReadEventTask.Start();
+
         }
 
-        private void dataReceived(SocketClient sender, byte[] data)
+        public void RegisterWindow(int wid, Window wind)
         {
 
-            onDataReceived?.Invoke(data);
+            Windows.Add(wid, wind);
+        }
+        
+        public void RegisterMessageID(int mid, Window wind)
+        {
+
+            Messages.Add(mid, wind);
         }
 
-        public void Send(PacketTypes type, object data)
+
+        public void ListenForData()
+        {
+            while (true)
+            {
+                byte[] buf = mComQueue.Read();
+
+                PacketReader reader = new PacketReader(buf);
+                int messageID = reader.ReadInt32();
+                int windowID = reader.ReadInt32();
+
+                Window wind;
+
+                if (messageID != -1)
+                {
+                    wind = Messages[messageID];
+                }
+                else
+                {
+                    wind = Windows[windowID];
+                }
+
+                wind.HandlePacket(reader);
+            }
+        }
+
+
+        public void ListenForDataEvent()
+        {
+            while (true)
+            {
+                byte[] buf = mEventQueue.Read();
+
+                PacketReader reader = new PacketReader(buf);
+                int messageID = reader.ReadInt32();
+                int windowID = reader.ReadInt32();
+
+                Window wind;
+
+                if (messageID != -1)
+                {
+                    wind = Messages[messageID];
+                }
+                else
+                {
+                    wind = Windows[windowID];
+                }
+
+                wind.HandlePacket(reader);
+            }
+        }
+
+
+        public void Send(PacketTypes type, int messageID, object o)
         {
             PacketWriter writer = new PacketWriter();
+            writer.Write(messageID);
             writer.Write((int)type);
-            writer.WriteObject(data);
 
-            mClient.Send(writer.GetBytes());
+            if (o != null)
+                writer.WriteObject(o);
+
+            WriteGeneral(writer);
         }
 
-        public void SendInt(PacketTypes type, int data)
+        public void SendInt(PacketTypes type, int windowID, int val)
         {
             PacketWriter writer = new PacketWriter();
+            writer.Write(windowID);
             writer.Write((int)type);
-            writer.Write(data);
+            writer.Write(val);
 
-            mClient.Send(writer.GetBytes());
+            WriteGeneral(writer);
+        }
+
+        public void WriteGeneral(PacketWriter packet)
+        {
+            mComQueue.Write(packet.GetBytes());
         }
     }
 }
